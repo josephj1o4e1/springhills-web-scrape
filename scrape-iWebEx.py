@@ -48,7 +48,6 @@ def parse_creation_date(datetime_str: str) -> datetime:
 
 
 
-
 def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_datetime, brieftest=False, brieftestLoops=40):
     print('Start scrape bot byHTMLclass....')
     if brieftest:
@@ -106,6 +105,12 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     
     assert WebDriverWait(driver, 60).until(EC.url_contains('mailbox/sent')), "error at: assert url_contains mailbox/sent"
     print('Navigated to Sent mail page!')
+    
+    # Important......it ran cause of this wait
+    assert WebDriverWait(driver, 60).until(
+        EC.text_to_be_present_in_element((By.XPATH, "/html/body/div[2]/aside[2]/ol/li[2]"), "Sent")
+    ), "Mail/Sent has not appeared in the upperbar"
+    
     sentmail_url = driver.current_url
     
 
@@ -114,13 +119,13 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     
     # Locate the <tbody> tag where the table is at, and get all the rows. 
     table = WebDriverWait(driver, 60).until(
-        EC.presence_of_element_located((By.XPATH, "/html/body/div[2]/aside[2]//section[@class='content']//table"))
+        EC.visibility_of_element_located((By.XPATH, "/html/body/div[2]/aside[2]//section[@class='content']//table"))
     )
     tbody = WebDriverWait(table, 60).until(
         EC.visibility_of_element_located((By.TAG_NAME, 'tbody'))
-    )
+    )    
     rows = WebDriverWait(tbody, 60).until(
-        EC.presence_of_all_elements_located((By.TAG_NAME, 'tr'))
+        EC.visibility_of_all_elements_located((By.TAG_NAME, 'tr'))
     )
     print(f'got all rows! row count={len(rows)}')
 
@@ -162,7 +167,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
             EC.visibility_of_element_located((By.TAG_NAME, 'tbody'))
         )
         rows = WebDriverWait(tbody, 60).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, 'tr'))
+            EC.visibility_of_all_elements_located((By.TAG_NAME, 'tr'))
         )
 
         print(f'rows count = {len(rows)}')        
@@ -193,7 +198,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         print('Navigated to EDI item page! ')
 
         # Get the desired data
-        print('Crawling data in a ship notice...')
+        print('Crawling data in a single ship notice...')
         try:
             # Need to Switch to iFrame first, because all the data (#document) is in under an iframe! 
             # Find the iframe element by id
@@ -336,10 +341,6 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
             raise e
 
         # switch back to main mailbox page
-        # if needed to switchback to original parent frame from iframe
-        # driver.switch_to.default_content()
-
-        # Navigate back to the previous page
         driver.get(sentmail_url)
         
     if not redflag:
@@ -372,13 +373,15 @@ if __name__=="__main__":
             options=chrome_options
         )
 
-        df_shipNotice = startScrapeBot_byHTMLclass(driver=driver)
+        df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, brieftest=False)
         assert df_shipNotice is not None, "df_shipNotice is None!"
         df_shipNotice.to_csv(f'./shipnotices/ship-notice-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv', index_label='id')
         last_crawled_datetime = datetime.today()
         print(f'last_crawled_datetime={last_crawled_datetime}')
     except AssertionError as e:
         print(f'main block, Assertion Error! {e}')
+    except KeyboardInterrupt as e:
+        print(f'main block, KeyboardInterrupt! {e}')
     except Exception as e:
         print(f'main block, General Exception: {e}')
     finally:
