@@ -362,7 +362,7 @@ if __name__=="__main__":
 
     # Get the "new data": last datetime of crawled data ~ newest
     date_format = "%m/%d/%Y %I:%M %p"
-    last_crawled_datetime = datetime.strptime("7/15/2024 12:00 AM", date_format)
+    last_crawled_datetime = datetime.strptime("7/17/2024 12:00 AM", date_format)
 
     try:
         # giving the path of chromedriver to selenium webdriver
