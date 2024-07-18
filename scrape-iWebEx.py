@@ -3,7 +3,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, WebDriverException
+from selenium_docker_ctrl import selenium_docker_ctrl
 
 from datetime import datetime
 import pandas as pd
@@ -35,6 +36,27 @@ def wait_until_selenium_server_up(selenium_url, timeout = 60):
     else:
         raise RuntimeError("Selenium server did not start within the timeout period.")
 
+def init_webdriver(timeout=60):
+    # giving the path of chromedriver to selenium webdriver
+    # Set up Chrome options
+    poll_interval = 2  # Time between polls (seconds)
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument("--disable-features=SidePanelPinning")
+            driver = webdriver.Remote(
+                command_executor='http://localhost:4444/wd/hub',
+                options=chrome_options
+            )
+            return driver
+        except:
+            print(f'driver not yet initialized, please WAIT until timeout={timeout} seconds.')
+            time.sleep(poll_interval)
+    else:
+        raise RuntimeError("Selenium server did not start within the timeout period.")
+
 def parse_creation_date(datetime_str: str) -> datetime:
     # 6/28/24 11:34 AM => 6/28/2024 11:34 AM
     date_part, time_part, meridiem = datetime_str.split(' ')
@@ -44,7 +66,6 @@ def parse_creation_date(datetime_str: str) -> datetime:
     date_format = "%m/%d/%Y %I:%M %p"
     creation_date = datetime.strptime(new_datetime_str, date_format)
     return creation_date
-
 
 
 
@@ -349,7 +370,10 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         return df_shipNotice
 
 
+
 if __name__=="__main__":
+    selenium_docker_ctrl('start')
+
     wait_until_selenium_server_up('http://localhost:7900/?autoconnect=1&resize=scale&password=secret', timeout=60)
 
     # Enter below your login credentials
@@ -364,16 +388,11 @@ if __name__=="__main__":
     date_format = "%m/%d/%Y %I:%M %p"
     last_crawled_datetime = datetime.strptime("7/17/2024 12:00 AM", date_format)
 
+    driver=None
     try:
-        # giving the path of chromedriver to selenium webdriver
-        # Set up Chrome options
-        chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument("--disable-features=SidePanelPinning")
-        
-        driver = webdriver.Remote(
-            command_executor='http://localhost:4444/wd/hub',
-            options=chrome_options
-        )
+        driver = init_webdriver(timeout=60)
+        if driver is not None:
+            print("Driver is on!")
 
         df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, brieftest=False)
         assert df_shipNotice is not None, "df_shipNotice is None!"
@@ -384,10 +403,14 @@ if __name__=="__main__":
         print(f'main block, Assertion Error! {e}')
     except KeyboardInterrupt as e:
         print(f'main block, KeyboardInterrupt! {e}')
+    except WebDriverException as e:
+        print(f'main block, WebDriverException! {e}')
     except Exception as e:
         print(f'main block, General Exception: {e}')
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
+        selenium_docker_ctrl('stop')
 
 
 

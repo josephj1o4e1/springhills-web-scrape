@@ -38,7 +38,7 @@ def stop_container(client, container_name):
     except docker.errors.NotFound:
         print(f"Container {container_name} not found, cannot stop.")
 
-def main(action):
+def selenium_docker_ctrl(action):
     client = docker.from_env()
     image_name = "selenium/standalone-chrome"
     container_name = "selenium-chrome-container"
@@ -53,4 +53,4 @@ if __name__ == "__main__":
     parser.add_argument('action', choices=['start', 'stop'], help="Action to perform on the Docker container.")
     args = parser.parse_args()
 
-    main(args.action)
+    selenium_docker_ctrl(args.action)
