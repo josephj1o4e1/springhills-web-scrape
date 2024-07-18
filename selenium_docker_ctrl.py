@@ -1,10 +1,7 @@
 import docker
+import argparse
 
-def main():
-    client = docker.from_env()
-    image_name = "selenium/standalone-chrome"
-    container_name = "selenium-chrome-container"
-
+def start_container(client, image_name, container_name):
     # Check if the Docker image exists locally
     try:
         client.images.get(image_name)
@@ -31,5 +28,29 @@ def main():
         )
         print(f"Container {container_name} started successfully.")
 
+def stop_container(client, container_name):
+    # Check if the Docker container exists
+    try:
+        container = client.containers.get(container_name)
+        print(f"Stopping existing Docker container: {container_name}")
+        container.stop()
+        print(f"Container {container_name} stopped successfully.")
+    except docker.errors.NotFound:
+        print(f"Container {container_name} not found, cannot stop.")
+
+def main(action):
+    client = docker.from_env()
+    image_name = "selenium/standalone-chrome"
+    container_name = "selenium-chrome-container"
+    if action=='start':
+        start_container(client, image_name, container_name)
+    elif action=='stop':
+        stop_container(client, container_name)
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Start or stop a Docker container for Selenium Chrome.")
+    parser.add_argument('action', choices=['start', 'stop'], help="Action to perform on the Docker container.")
+    args = parser.parse_args()
+
+    main(args.action)
