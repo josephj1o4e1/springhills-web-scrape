@@ -282,6 +282,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
                         all_caption_elements = WebDriverWait(table, 60).until(
                             EC.presence_of_all_elements_located((By.CLASS_NAME, "caption"))
                         )
+                        target_attr_count=0
                         for caption_element in all_caption_elements:
                             print(f'Order #, PO # captions  =  {caption_element.text}')
                             caption = caption_element.text
@@ -291,12 +292,13 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
                                 data_element = WebDriverWait(caption_element, 60).until(
                                     EC.presence_of_element_located((By.XPATH, "following-sibling::td[@class='data']"))
                                 )
-                                if 'Order #' in caption:
-                                    itemAttr_dict['order_type'] = 'Buyer'
-                                else:
-                                    itemAttr_dict['order_type'] = 'Purchase'
                                 print(f'yay Im in Order # and PO #!!!\ndata={data_element.text}' )
-                                itemAttr_dict['order_num'] = data_element.text
+                                if 'Order #' in caption:
+                                    # itemAttr_dict['order_type'] = 'Buyer'
+                                    itemAttr_dict['order_num'] = data_element.text
+                                else: # PO num
+                                    # itemAttr_dict['order_type'] = 'Purchase'
+                                    itemAttr_dict['order_num'] = data_element.text[:6] # first 6 digits                             
                                 target_attr_count+=1
                             elif 'Buyer Part #' in caption: 
                                 data_element = WebDriverWait(caption_element, 60).until(
@@ -313,7 +315,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
                             elif target_attr_count==3:
                                 break
                         assert 'order_num' in itemAttr_dict.keys(), "'order_num' key not found in itemAttr_dict"
-                        assert 'order_type' in itemAttr_dict.keys(), "'order_type' key not found in itemAttr_dict"
+                        # assert 'order_type' in itemAttr_dict.keys(), "'order_type' key not found in itemAttr_dict"
                         assert 'buyer_part_num' in itemAttr_dict.keys(), "'buyer_part_num' key not found in itemAttr_dict"
                         assert 'ship_quantity' in itemAttr_dict.keys(), "'ship_quantity' key not found in itemAttr_dict"
                         
