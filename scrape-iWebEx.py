@@ -1,16 +1,18 @@
+print('Hey there! Ready to scrape some data? Let me sprinkle some magic. Just a moment...')
 import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By 
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, WebDriverException
+from selenium.common.exceptions import ElementClickInterceptedException, WebDriverException
 from selenium_docker_ctrl import selenium_docker_ctrl
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import time
 import requests
 
+script_run_time = time.time()
 
 def is_selenium_server_up(url):
     try:
@@ -52,7 +54,7 @@ def init_webdriver(timeout=60):
             )
             return driver
         except:
-            print(f'driver not yet initialized, please WAIT until timeout={timeout} seconds.')
+            print(f'Driver not yet initialized, please WAIT until timeout={timeout} seconds.')
             time.sleep(poll_interval)
     else:
         raise RuntimeError("Selenium server did not start within the timeout period.")
@@ -66,6 +68,21 @@ def parse_creation_date(datetime_str: str) -> datetime:
     date_format = "%m/%d/%Y %I:%M %p"
     creation_date = datetime.strptime(new_datetime_str, date_format)
     return creation_date
+
+def format_elapsed_seconds(elapsed_seconds):
+    # Convert elapsed time to timedelta
+    elapsed_time = timedelta(seconds=elapsed_seconds)
+
+    # Format the output using strftime
+    formatted_time = str(elapsed_time).split()  # split into days, hours, minutes, seconds
+
+    # Output the formatted time
+    if len(formatted_time)>1:
+        timetime = formatted_time[2].split(':')
+        return f'Runtime: {formatted_time[0]}-days, {timetime[0]}-hrs, {timetime[1]}-mins, {round(float(timetime[2]), 2)}-secs'
+    else: 
+        timetime = formatted_time[0].split(':')
+        return f'0-days, {timetime[0]}-hrs, {timetime[1]}-mins, {round(float(timetime[2]), 2)}-secs'
 
 
 
@@ -148,7 +165,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     rows = WebDriverWait(tbody, 60).until(
         EC.visibility_of_all_elements_located((By.TAG_NAME, 'tr'))
     )
-    print(f'got all rows! row count={len(rows)}')
+    print(f'Got all rows in current page! row count={len(rows)}')
 
     # Out of all the rows, find the "un-crawled" rows:  within the specified date AND is a 'ship notice'
     ship_notice_idx=[]    
@@ -174,7 +191,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     # In each un-crawled ship notice, click on its "view" folder-like button and get data from classes = 'caption', 'data'. 
     redflag=0
     df_shipNotice = pd.DataFrame()
-    print(f'crawled ship notices at rows = {ship_notice_idx}....')
+    print(f'Detected {len(ship_notice_idx)} ship notices at rows = {ship_notice_idx}....')
     
     for idx in reversed(ship_notice_idx): # reversed, start processing from earliest non-crawled date.
         # To avoid stale element exception, find all rows everytime.
@@ -189,11 +206,10 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         )
         rows = WebDriverWait(tbody, 60).until(
             EC.visibility_of_all_elements_located((By.TAG_NAME, 'tr'))
-        )
-
-        print(f'rows count = {len(rows)}')        
+        )       
         
         # click on View Button and direct to EDI item page. 
+        print(f'Start processing row {idx}')
         row = rows[idx]
         try:
             # Access through relative XPATH
@@ -360,7 +376,8 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         except Exception as e:
             print('Exception occured when crawling data, saving to temporary csv...')
             redflag=1
-            df_shipNotice.to_csv(f'./shipnotices/ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv')
+            tmpfile=f'./shipnotices/ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv'
+            df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfile))
             raise e
 
         # switch back to main mailbox page
@@ -386,7 +403,22 @@ if __name__=="__main__":
 
     # Get the "new data": last datetime of crawled data ~ newest
     date_format = "%m/%d/%Y %I:%M %p"
-    last_crawled_datetime = datetime.strptime("7/17/2024 12:00 AM", date_format)
+    default_last_crawled_datetime = datetime.strptime("07/18/2024 12:00 AM", date_format)
+
+    folder_path = os.path.join(os.getcwd(), 'shipnotices')
+    if not os.path.exists(folder_path):
+        # If it doesn't exist, create the folder
+        os.makedirs(folder_path)
+        print(f'Created folder: {folder_path}')
+    filename_total = os.path.join(folder_path, 'ship-notice-total.csv')
+    if not os.path.exists(filename_total):
+        print(f'{filename_total} not existed, last_crawled_datetime set to {default_last_crawled_datetime}')
+        last_crawled_datetime = default_last_crawled_datetime
+    else:
+        # last_crawled_datetime = newest date in database
+        df_shipNotice_total = pd.read_csv(filename_total)
+        last_crawled_datetime = pd.to_datetime(df_shipNotice_total['create_datetime']).max()
+        print(f'found {filename_total}, last_crawled_datetime set to latest datetime: {last_crawled_datetime}')
 
     driver=None
     try:
@@ -396,21 +428,40 @@ if __name__=="__main__":
 
         df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, brieftest=False)
         assert df_shipNotice is not None, "df_shipNotice is None!"
-        df_shipNotice.to_csv(f'./shipnotices/ship-notice-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv', index_label='id')
-        last_crawled_datetime = datetime.today()
-        print(f'last_crawled_datetime={last_crawled_datetime}')
+
+        fname_daily = f'ship-notice-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv'
+        filename_daily = os.path.join(folder_path, fname_daily)
+        if len(df_shipNotice)>0:
+            df_shipNotice.to_csv(filename_daily, index_label='id')
+
+        filename_total = os.path.join(folder_path, 'ship-notice-total.csv')
+        if not os.path.exists(filename_total):
+            print(f'{filename_total} not existed, create one now and keep all the crawled data here. ')
+            df_shipNotice.to_csv(filename_total, index_label='id')
+        else:
+            print(f'Append the newly crawled rows to {filename_total}')
+            df_shipNotice_total = pd.read_csv(filename_total)
+            df_shipNotice_total.set_index(inplace=True)
+            df_shipNotice_total = pd.concat([df_shipNotice_total, df_shipNotice], ignore_index=True)
+            df_shipNotice_total.to_csv(filename_total)
+        
     except AssertionError as e:
-        print(f'main block, Assertion Error! {e}')
+        print(f'In main try-except block, Assertion Error! {e}')
     except KeyboardInterrupt as e:
-        print(f'main block, KeyboardInterrupt! {e}')
+        print(f'In main try-except block, KeyboardInterrupt! {e}')
     except WebDriverException as e:
-        print(f'main block, WebDriverException! {e}')
+        print(f'In main try-except block, WebDriverException! {e}')
     except Exception as e:
-        print(f'main block, General Exception: {e}')
+        print(f'In main try-except block, General Exception: {e}')
     finally:
         if driver:
             driver.quit()
         selenium_docker_ctrl('stop')
+        elapsed_seconds = time.time() - script_run_time
+        print(f'script run time = {format_elapsed_seconds(elapsed_seconds)}')
+        input("Press Enter to exit...")
+        print('Have a Nice Day!')
+
 
 
 
