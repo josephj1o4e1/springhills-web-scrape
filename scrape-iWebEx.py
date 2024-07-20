@@ -22,14 +22,27 @@ class MyLoginError(Exception):
         self.message = message
         super().__init__(self.message)
 
+class MyShipNoticeCrawlingError(Exception):
+    """Exception raised for errors in the single ShipNotice crawling process."""
+    def __init__(self, message="ShipNotice crawling error. "):
+        self.message = message
+        super().__init__(self.message)
+
+
 def check_docker_installed():
     try:
         x = subprocess.check_output('docker --version', stderr=subprocess.STDOUT)
         print(f"Great! I see you've already installed {x.decode('utf-8')}")
         print()  # Print the Docker version if installed
-    except subprocess.CalledProcessError as e:
+    except FileNotFoundError as e:
         import sys
+        print(e)
         print('Docker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
+        input("Press Enter to exit...")
+        sys.exit('Till next time...')
+    except Exception as e:
+        import sys
+        print(f'Contact support. \nerror message: {e}')
         input("Press Enter to exit...")
         sys.exit('Till next time...')
 
@@ -438,11 +451,13 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
             # }
 
         except Exception as e:
-            print('Exception occured when crawling data, saving to temporary csv...')
+            print('\nException occured when crawling data, saving to temporary csv...')
             redflag=1
             tmpfilepath=os.path.join(shipnotice_folderpath, f'ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv')
             df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfilepath))
-            raise e
+            raise MyShipNoticeCrawlingError("\nShipNotice crawling error. There could be new ship notices added and shifted the table data. \
+                                            \nWait and try again. Make sure that crawling time is mostly during non-shipping hours. \
+                                            \nOr else, contact support. ")
 
         # switch back to main mailbox page
         driver.get(sentmail_url)
@@ -495,7 +510,7 @@ if __name__=="__main__":
                 if df_shipNotice:
                     break
             except MyLoginError as e:
-                print(f'\n{e}. Username or Password incorrect. \nTry again. \n')
+                print(f'\n{e}. Username or Password incorrect. \nTry again. (Hit Ctrl-C to Exit)\n')
             except Exception as e:
                 break
                 
@@ -513,6 +528,8 @@ if __name__=="__main__":
         print(f'\nIn main try-except block, KeyboardInterrupt! {e}')
     except WebDriverException as e:
         print(f'\nIn main try-except block, WebDriverException! {e}')
+    except MyShipNoticeCrawlingError as e:
+        print(f'\nIn main try-except block, MyShipNoticeCrawlingError! {e}')
     except Exception as e:
         print(f'\nIn main try-except block, General Exception: {e}')
     finally:
