@@ -5,9 +5,9 @@ def start_container(client, image_name, container_name):
     # Check if the Docker image exists locally
     try:
         client.images.get(image_name)
-        print(f"Image {image_name} found locally.")
+        print(f"\nImage {image_name} found locally.")
     except docker.errors.ImageNotFound:
-        print(f"Image not found locally, now pulling Docker image: {image_name}")
+        print(f"\nImage not found locally, now pulling Docker image: {image_name}")
         client.images.pull(image_name)
         print(f"Image {image_name} pulled successfully.")
 
@@ -32,7 +32,7 @@ def stop_container(client, container_name):
     # Check if the Docker container exists
     try:
         container = client.containers.get(container_name)
-        print(f"Stopping existing Docker container: {container_name}")
+        print(f"\nStopping existing Docker container: {container_name}")
         container.stop()
         print(f"Container {container_name} stopped successfully.")
     except docker.errors.NotFound:
@@ -46,6 +46,8 @@ def selenium_docker_ctrl(action):
         start_container(client, image_name, container_name)
     elif action=='stop':
         stop_container(client, container_name)
+    else:
+        raise ValueError("selenium_docker_ctrl(action), where action should be either 'start' or 'stop'")
 
 
 if __name__ == "__main__":

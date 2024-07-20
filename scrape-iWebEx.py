@@ -1,5 +1,6 @@
-print('Hey there! Ready to scrape some data? Let me sprinkle some magic. Just a moment...')
-import os
+print('Welcome to the iExchangeWeb Scraper! \n\
+      Ready to scrape some data? Let me sprinkle some magic. Just a moment...')
+import os, subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By 
 from selenium.webdriver.support.wait import WebDriverWait
@@ -11,8 +12,26 @@ from datetime import datetime, timedelta
 import pandas as pd
 import time
 import requests
+import maskpass
 
 script_run_time = time.time()
+
+class MyLoginError(Exception):
+    """Exception raised for errors in the login process."""
+    def __init__(self, message="Login failed"):
+        self.message = message
+        super().__init__(self.message)
+
+def check_docker_installed():
+    try:
+        x = subprocess.check_output('docker --version', stderr=subprocess.STDOUT)
+        print(f"Great! I see you've already installed {x.decode('utf-8')}")
+        print()  # Print the Docker version if installed
+    except subprocess.CalledProcessError as e:
+        import sys
+        print('Docker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
+        input("Press Enter to exit...")
+        sys.exit('Till next time...')
 
 def is_selenium_server_up(url):
     try:
@@ -59,13 +78,32 @@ def init_webdriver(timeout=60):
     else:
         raise RuntimeError("Selenium server did not start within the timeout period.")
 
-def parse_creation_date(datetime_str: str) -> datetime:
+def get_last_crawled_datetime(shipnotice_filepath: str) -> datetime:
+    if not os.path.exists(shipnotice_filepath):
+        print(f'First timer I suppose? No Problem! \n')
+        input_date_format = "%m/%d/%Y"
+        while True:
+            input_date = input('Please enter the earliest date you want to crawl/scrape (MM/DD/YYYY): ')
+            try:
+                last_crawled_datetime = datetime.strptime(input_date, input_date_format)
+                break
+            except ValueError as e:
+                print('Not a valid date, please give a date that matches the format MM/DD/YYYY')
+        print(f'last_crawled_datetime set to: {last_crawled_datetime}')
+    else:
+        # last_crawled_datetime = newest date in database(ship-notice-total.csv)
+        df_shipNotice_total = pd.read_csv(shipnotice_filepath)
+        last_crawled_datetime = pd.to_datetime(df_shipNotice_total['create_datetime']).max()
+        print(f'found {shipnotice_filename}, \n\
+              last crawled date set to: {last_crawled_datetime}')    
+    return last_crawled_datetime
+
+def parse_creation_date(datetime_str: str, date_format) -> datetime:
     # 6/28/24 11:34 AM => 6/28/2024 11:34 AM
     date_part, time_part, meridiem = datetime_str.split(' ')
     month, day, year = date_part.split('/')
     full_year = f"20{year}"
     new_datetime_str = f"{month}/{day}/{full_year} {time_part} {meridiem}"
-    date_format = "%m/%d/%Y %I:%M %p"
     creation_date = datetime.strptime(new_datetime_str, date_format)
     return creation_date
 
@@ -84,16 +122,32 @@ def format_elapsed_seconds(elapsed_seconds):
         timetime = formatted_time[0].split(':')
         return f'0-days, {timetime[0]}-hrs, {timetime[1]}-mins, {round(float(timetime[2]), 2)}-secs'
 
+def save_to_shipnotice_daily(shipnoticefolder_path, df_shipNotice, idx_label = 'id'):
+    fname_daily = f'ship-notice-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv'
+    filename_daily = os.path.join(shipnoticefolder_path, fname_daily)
+    if len(df_shipNotice)>0:
+        df_shipNotice.to_csv(filename_daily, index_label=idx_label)
+
+def save_to_shipnotice_total(shipnotice_filepath, df_shipNotice, idx_label = 'id'): # DB
+    if not os.path.exists(shipnotice_filepath):
+        print(f'{shipnotice_filepath} not existed, create one now and keep all the crawled data here. ')
+        df_shipNotice.to_csv(shipnotice_filepath, index_label=idx_label)
+    else:
+        print(f'Append the newly crawled rows to {shipnotice_filepath}')
+        df_shipNotice_total = pd.read_csv(shipnotice_filepath)
+        df_shipNotice_total.set_index(idx_label, inplace=True)
+        df_shipNotice_total = pd.concat([df_shipNotice_total, df_shipNotice], ignore_index=True)
+        df_shipNotice_total.to_csv(shipnotice_filepath, index_label=idx_label)
 
 
-def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_datetime, brieftest=False, brieftestLoops=40):
-    print('Start scrape bot byHTMLclass....')
+
+def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_datetime, date_format, shipnotice_folderpath, brieftest=False, brieftestLoops=40):
     if brieftest:
         print('It is a Brief Test! ')
 
     
     # opening the website  in chrome.
-    print('Opening URL....')
+    # print('Opening iExchangeWeb URL....')
     driver.get(url)
     assert "iExchangeWeb" in driver.title
 
@@ -120,9 +174,19 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     
     signin_button.click()
 
-    # New Page: mailbox/inbox
-    assert WebDriverWait(driver, 60).until(EC.url_contains('mailbox/inbox')), "error at assert: mailbox_url doesnt contain mailbox/inbox"
-    print("Now in mailbox!")
+
+    # Check Login Result: Wait for either loginError, or successful login to mailbox/inbox
+    loginResult = WebDriverWait(driver,60).until(
+        lambda d: EC.visibility_of_element_located((By.ID, "login_error"))(d) \
+            or EC.url_contains('mailbox/inbox')(d)
+    )
+    if isinstance(loginResult, bool) and loginResult:
+        # New Page: mailbox/inbox
+        assert 'mailbox/inbox' in driver.current_url, "url doesn't contain mailbox/inbox..."
+        print("Logged In!! Navigated to mailbox!!")
+    else:
+        raise MyLoginError
+
 
     # Click on the sentmail_button
     leftside_bar = WebDriverWait(driver, 60).until( \
@@ -175,7 +239,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
 
         creation_date_str = WebDriverWait(row, 60).until( \
             EC.presence_of_element_located((By.XPATH, "./td[11]"))).text
-        creation_date = parse_creation_date(creation_date_str)
+        creation_date = parse_creation_date(creation_date_str, date_format)
         if last_crawled_datetime >= creation_date:
             print('last_crawled_datetime >= creation_date. done. ')
             break
@@ -376,8 +440,8 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         except Exception as e:
             print('Exception occured when crawling data, saving to temporary csv...')
             redflag=1
-            tmpfile=f'./shipnotices/ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv'
-            df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfile))
+            tmpfilepath=os.path.join(shipnotice_folderpath, f'ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv')
+            df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfilepath))
             raise e
 
         # switch back to main mailbox page
@@ -389,78 +453,77 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
 
 
 if __name__=="__main__":
+    check_docker_installed()
+    
+    selenium_url = 'http://localhost:7900/?autoconnect=1&resize=scale&password=secret'
+
+    # Stop container first if previous execution failed to stop selenium docker. 
+    if is_selenium_server_up(selenium_url):   
+        selenium_docker_ctrl('stop')
+    
     selenium_docker_ctrl('start')
-
-    wait_until_selenium_server_up('http://localhost:7900/?autoconnect=1&resize=scale&password=secret', timeout=60)
-
-    # Enter below your login credentials
-    ***REMOVED***
-    ***REMOVED***
-
-    # URL of the login page of site
-    # which you want to automate login.
-    url = "https://www.iexchangeweb.com/ieweb/general/login"
-
-    # Get the "new data": last datetime of crawled data ~ newest
-    date_format = "%m/%d/%Y %I:%M %p"
-    default_last_crawled_datetime = datetime.strptime("07/18/2024 12:00 AM", date_format)
-
-    folder_path = os.path.join(os.getcwd(), 'shipnotices')
-    if not os.path.exists(folder_path):
-        # If it doesn't exist, create the folder
-        os.makedirs(folder_path)
-        print(f'Created folder: {folder_path}')
-    filename_total = os.path.join(folder_path, 'ship-notice-total.csv')
-    if not os.path.exists(filename_total):
-        print(f'{filename_total} not existed, last_crawled_datetime set to {default_last_crawled_datetime}')
-        last_crawled_datetime = default_last_crawled_datetime
-    else:
-        # last_crawled_datetime = newest date in database
-        df_shipNotice_total = pd.read_csv(filename_total)
-        last_crawled_datetime = pd.to_datetime(df_shipNotice_total['create_datetime']).max()
-        print(f'found {filename_total}, last_crawled_datetime set to latest datetime: {last_crawled_datetime}')
+    wait_until_selenium_server_up(selenium_url, timeout=60)
 
     driver=None
+    df_shipNotice=None
     try:
         driver = init_webdriver(timeout=60)
         if driver is not None:
             print("Driver is on!")
 
-        df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, brieftest=False)
+        # Set date format of 'creation_date' in iExchangeWeb
+        date_format = "%m/%d/%Y %I:%M %p"
+        # Create shipnotices folder to save the crawled data
+        shipnotice_foldername = 'shipnotices'
+        shipnotice_filename = 'ship-notice-total.csv'
+        shipnotice_folderpath = os.path.join(os.getcwd(), shipnotice_foldername)
+        if not os.path.exists(shipnotice_folderpath):
+            # If it doesn't exist, create the folder
+            os.makedirs(shipnotice_folderpath)
+            print(f'Created folder: ./{shipnotice_foldername}')
+        shipnotice_filepath=os.path.join(shipnotice_folderpath, shipnotice_filename)
+        last_crawled_datetime = get_last_crawled_datetime(shipnotice_filepath) # ship-notice-total.csv
+
+        while True:
+            try:
+                # Enter below your login credentials
+                username = input('\nEnter iExchangeWeb username: ')
+                password = maskpass.askpass('\nEnter iExchangeWeb password: ')
+                # URL of the login page of site
+                url = "https://www.iexchangeweb.com/ieweb/general/login"
+                df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, date_format=date_format, shipnotice_folderpath=shipnotice_folderpath, brieftest=False)
+                if df_shipNotice:
+                    break
+            except MyLoginError as e:
+                print(f'\n{e}. Username or Password incorrect. \nTry again. \n')
+            except Exception as e:
+                break
+                
+
         assert df_shipNotice is not None, "df_shipNotice is None!"
 
-        fname_daily = f'ship-notice-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv'
-        filename_daily = os.path.join(folder_path, fname_daily)
-        if len(df_shipNotice)>0:
-            df_shipNotice.to_csv(filename_daily, index_label='id')
+        save_to_shipnotice_daily(shipnotice_folderpath, df_shipNotice)
+        save_to_shipnotice_total(shipnotice_filepath, df_shipNotice)
 
-        filename_total = os.path.join(folder_path, 'ship-notice-total.csv')
-        if not os.path.exists(filename_total):
-            print(f'{filename_total} not existed, create one now and keep all the crawled data here. ')
-            df_shipNotice.to_csv(filename_total, index_label='id')
-        else:
-            print(f'Append the newly crawled rows to {filename_total}')
-            df_shipNotice_total = pd.read_csv(filename_total)
-            df_shipNotice_total.set_index(inplace=True)
-            df_shipNotice_total = pd.concat([df_shipNotice_total, df_shipNotice], ignore_index=True)
-            df_shipNotice_total.to_csv(filename_total)
+        
         
     except AssertionError as e:
-        print(f'In main try-except block, Assertion Error! {e}')
+        print(f'\nIn main try-except block, Assertion Error! {e}')
     except KeyboardInterrupt as e:
-        print(f'In main try-except block, KeyboardInterrupt! {e}')
+        print(f'\nIn main try-except block, KeyboardInterrupt! {e}')
     except WebDriverException as e:
-        print(f'In main try-except block, WebDriverException! {e}')
+        print(f'\nIn main try-except block, WebDriverException! {e}')
     except Exception as e:
-        print(f'In main try-except block, General Exception: {e}')
+        print(f'\nIn main try-except block, General Exception: {e}')
     finally:
         if driver:
             driver.quit()
         selenium_docker_ctrl('stop')
         elapsed_seconds = time.time() - script_run_time
         print(f'script run time = {format_elapsed_seconds(elapsed_seconds)}')
-        input("Press Enter to exit...")
-        print('Have a Nice Day!')
+        print(f"Checkout '{shipnotice_foldername}' folder for all the crawled data")
+        input("\nPress Enter to exit...")
+        print("Have a Nice Day!  (Exiting...)")
 
 
 
