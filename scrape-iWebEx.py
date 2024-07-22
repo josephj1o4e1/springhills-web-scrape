@@ -7,6 +7,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException, WebDriverException
 from selenium_docker_ctrl import selenium_docker_ctrl
+from get_credentials import get_credentials
 
 from datetime import datetime, timedelta
 import pandas as pd
@@ -188,7 +189,7 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
     if isinstance(loginResult, bool) and loginResult:
         # New Page: mailbox/inbox
         assert 'mailbox/inbox' in driver.current_url, "url doesn't contain mailbox/inbox..."
-        print("Logged In!! Navigated to mailbox!!")
+        print("Logged In!! \nYour Gorgeous Crawler Agent has Navigated to mailbox!")
     else:
         raise MyLoginError
 
@@ -501,8 +502,10 @@ if __name__=="__main__":
         while True:
             try:
                 # Enter below your login credentials
-                username = input('\nEnter iExchangeWeb username: ')
-                password = maskpass.askpass('Enter iExchangeWeb password: ')
+                # username = input('\nEnter iExchangeWeb username: ')
+                # password = maskpass.askpass('Enter iExchangeWeb password: ')
+                username, password = get_credentials()
+
                 # URL of the login page of site
                 url = "https://www.iexchangeweb.com/ieweb/general/login"
                 df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, date_format=date_format, shipnotice_folderpath=shipnotice_folderpath, brieftest=False)
@@ -521,7 +524,7 @@ if __name__=="__main__":
     except AssertionError as e:
         print(f'\nIn main try-except block, Assertion Error! {e}')
     except KeyboardInterrupt as e:
-        print(f'\nIn main try-except block, KeyboardInterrupt! {e}')
+        print(f'\nKeyboardInterrupt! {e}')
     except RuntimeError as e:
         print(f'\nIn main try-except block, RuntimeError! {e}')
     except WebDriverException as e:
