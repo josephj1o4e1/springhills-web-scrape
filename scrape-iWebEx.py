@@ -1,6 +1,6 @@
 print('Welcome to the iExchangeWeb Scraper! \n\
       Ready to scrape some data? Let me sprinkle some magic. Just a moment...')
-import os, subprocess
+import sys, os, subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By 
 from selenium.webdriver.support.wait import WebDriverWait
@@ -32,19 +32,11 @@ class MyShipNoticeCrawlingError(Exception):
 def check_docker_installed():
     try:
         x = subprocess.check_output('docker --version', stderr=subprocess.STDOUT)
-        print(f"Great! I see you've already installed {x.decode('utf-8')}")
-        print()  # Print the Docker version if installed
+        print(f"Great! I see you've already installed {x.decode('utf-8')}") # Print the Docker version if installed
     except FileNotFoundError as e:
-        import sys
         print(e)
-        print('Docker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
-        input("Press Enter to exit...")
-        sys.exit('Till next time...')
-    except Exception as e:
-        import sys
-        print(f'Contact support. \nerror message: {e}')
-        input("Press Enter to exit...")
-        sys.exit('Till next time...')
+        print('\nDocker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
+        raise
 
 def is_selenium_server_up(url):
     try:
@@ -143,10 +135,10 @@ def save_to_shipnotice_daily(shipnoticefolder_path, df_shipNotice, idx_label = '
 
 def save_to_shipnotice_total(shipnotice_filepath, df_shipNotice, idx_label = 'id'): # DB
     if not os.path.exists(shipnotice_filepath):
-        print(f'{shipnotice_filepath} not existed, create one now and keep all the crawled data here. ')
+        print(f'\n{shipnotice_filepath} does not exist, create one now and keep all the crawled data here. ')
         df_shipNotice.to_csv(shipnotice_filepath, index_label=idx_label)
     else:
-        print(f'Append the newly crawled rows to {shipnotice_filepath}')
+        print(f'\nAppend the newly crawled rows to {shipnotice_filepath}')
         df_shipNotice_total = pd.read_csv(shipnotice_filepath)
         df_shipNotice_total.set_index(idx_label, inplace=True)
         df_shipNotice_total = pd.concat([df_shipNotice_total, df_shipNotice], ignore_index=True)
@@ -453,35 +445,42 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
         except Exception as e:
             print('\nException occured when crawling data, saving to temporary csv...')
             redflag=1
-            tmpfilepath=os.path.join(shipnotice_folderpath, f'ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv')
-            df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfilepath))
-            raise MyShipNoticeCrawlingError("\nShipNotice crawling error. There could be new ship notices added and shifted the table data. \
-                                            \nWait and try again. Make sure that crawling time is mostly during non-shipping hours. \
+            if df_shipNotice:
+                tmpfilepath=os.path.join(shipnotice_folderpath, f'ship-notice-TEMP-{datetime.today().date()}_{datetime.today().hour}_{datetime.today().minute}.csv')
+                df_shipNotice.to_csv(os.path.join(os.getcwd(), tmpfilepath))
+            raise MyShipNoticeCrawlingError(f"\nShipNotice crawling error. Error message={e}\
+                                            \nThere could be new ship notices added in the mean time and shifted the table. \
+                                            \nWait and try again. Make sure the crawling time is mostly during non-shipping hours. \
                                             \nOr else, contact support. ")
 
         # switch back to main mailbox page
         driver.get(sentmail_url)
-        
+    
     if not redflag:
         return df_shipNotice
 
 
 
-if __name__=="__main__":
-    check_docker_installed()
-    
-    selenium_url = 'http://localhost:7900/?autoconnect=1&resize=scale&password=secret'
-
-    # Stop container first if previous execution failed to stop selenium docker. 
-    if is_selenium_server_up(selenium_url):   
-        selenium_docker_ctrl('stop')
-    
-    selenium_docker_ctrl('start')
-    wait_until_selenium_server_up(selenium_url, timeout=60)
-
+if __name__=="__main__":    
     driver=None
     df_shipNotice=None
     try:
+        try:
+            # Setup Selenium Docker Environment
+            check_docker_installed()
+            
+            selenium_url = 'http://localhost:7900/?autoconnect=1&resize=scale&password=secret'
+
+            # Stop container first if previous execution failed to stop selenium docker. 
+            if is_selenium_server_up(selenium_url):   
+                selenium_docker_ctrl('stop')
+            
+            selenium_docker_ctrl('start')
+            wait_until_selenium_server_up(selenium_url, timeout=60)
+        except:
+            raise RuntimeError('Selenium Docker Environment Setup not completed yet. ')
+
+        # Start Selenium Web Driver
         driver = init_webdriver(timeout=60)
         if driver is not None:
             print("Driver is on!")
@@ -503,22 +502,19 @@ if __name__=="__main__":
             try:
                 # Enter below your login credentials
                 username = input('\nEnter iExchangeWeb username: ')
-                password = maskpass.askpass('\nEnter iExchangeWeb password: ')
+                password = maskpass.askpass('Enter iExchangeWeb password: ')
                 # URL of the login page of site
                 url = "https://www.iexchangeweb.com/ieweb/general/login"
                 df_shipNotice = startScrapeBot_byHTMLclass(driver=driver, username=username, password=password, url=url, last_crawled_datetime=last_crawled_datetime, date_format=date_format, shipnotice_folderpath=shipnotice_folderpath, brieftest=False)
-                if df_shipNotice:
-                    break
+                break
             except MyLoginError as e:
                 print(f'\n{e}. Username or Password incorrect. \nTry again. (Hit Ctrl-C to Exit)\n')
-            except Exception as e:
-                break
-                
 
         assert df_shipNotice is not None, "df_shipNotice is None!"
 
         save_to_shipnotice_daily(shipnotice_folderpath, df_shipNotice)
         save_to_shipnotice_total(shipnotice_filepath, df_shipNotice)
+        print(f"Checkout '{shipnotice_foldername}' folder for all the crawled data")
 
         
         
@@ -526,6 +522,8 @@ if __name__=="__main__":
         print(f'\nIn main try-except block, Assertion Error! {e}')
     except KeyboardInterrupt as e:
         print(f'\nIn main try-except block, KeyboardInterrupt! {e}')
+    except RuntimeError as e:
+        print(f'\nIn main try-except block, RuntimeError! {e}')
     except WebDriverException as e:
         print(f'\nIn main try-except block, WebDriverException! {e}')
     except MyShipNoticeCrawlingError as e:
@@ -538,7 +536,6 @@ if __name__=="__main__":
         selenium_docker_ctrl('stop')
         elapsed_seconds = time.time() - script_run_time
         print(f'script run time = {format_elapsed_seconds(elapsed_seconds)}')
-        print(f"Checkout '{shipnotice_foldername}' folder for all the crawled data")
         input("\nPress Enter to exit...")
         print("Have a Nice Day!  (Exiting...)")
 

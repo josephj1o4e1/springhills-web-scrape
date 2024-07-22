@@ -18,7 +18,7 @@ def start_container(client, image_name, container_name):
         container.start()
         print(f"Container {container_name} started successfully.")
     except docker.errors.NotFound:
-        print(f"Container {container_name} not found, now Running new Docker container from image {image_name} with container name {container_name}")
+        print(f"Container {container_name} not found. Now starting a new Docker container {container_name} from image {image_name}")
         container = client.containers.run(
             image_name,
             name=container_name,
