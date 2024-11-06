@@ -32,7 +32,7 @@ class MyShipNoticeCrawlingError(Exception):
 
 def check_docker_installed():
     try:
-        x = subprocess.check_output('docker --version', stderr=subprocess.STDOUT)
+        x = subprocess.check_output(['docker', '--version'], stderr=subprocess.STDOUT)
         print(f"Great! I see you've already installed {x.decode('utf-8')}") # Print the Docker version if installed
     except FileNotFoundError as e:
         print(e)
@@ -182,9 +182,13 @@ def startScrapeBot_byHTMLclass(driver, username, password, url, last_crawled_dat
 
 
     # Check Login Result: Wait for either loginError, or successful login to mailbox/inbox
-    loginResult = WebDriverWait(driver,60).until(
-        lambda d: EC.visibility_of_element_located((By.ID, "login_error"))(d) \
-            or EC.url_contains('mailbox/inbox')(d)
+    # loginResult = WebDriverWait(driver,60).until(
+    #     lambda d: EC.visibility_of_element_located((By.ID, "login_error"))(d) \
+    #         or EC.url_contains('mailbox/inbox')(d)
+    # )
+    loginResult = WebDriverWait(driver, 60).until(
+        lambda d: d.find_element(By.ID, "login_error").is_displayed() or 
+        "mailbox/inbox" in d.current_url
     )
     if isinstance(loginResult, bool) and loginResult:
         # New Page: mailbox/inbox
@@ -478,8 +482,10 @@ if __name__=="__main__":
             
             selenium_docker_ctrl('start')
             wait_until_selenium_server_up(selenium_url, timeout=60)
-        except:
-            raise RuntimeError('Selenium Docker Environment Setup not completed yet. ')
+        except Exception as e:
+            print(f"Error Occurred when setting up Selenium Docker: {e}")
+            raise RuntimeError('Selenium Docker Environment Setup not completed. ')
+        
 
         # Start Selenium Web Driver
         driver = init_webdriver(timeout=60)

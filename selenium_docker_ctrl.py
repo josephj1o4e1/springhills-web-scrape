@@ -1,5 +1,15 @@
 import docker
 import argparse
+import subprocess
+
+def check_docker_installed():
+    try:
+        x = subprocess.check_output(['docker', '--version'], stderr=subprocess.STDOUT)
+        print(f"Great! I see you've already installed {x.decode('utf-8')}") # Print the Docker version if installed
+    except FileNotFoundError as e:
+        print(e)
+        print('\nDocker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
+        raise
 
 def start_container(client, image_name, container_name):
     # Check if the Docker image exists locally
@@ -10,6 +20,8 @@ def start_container(client, image_name, container_name):
         print(f"\nImage not found locally, now pulling Docker image: {image_name}")
         client.images.pull(image_name)
         print(f"Image {image_name} pulled successfully.")
+    except Exception as e:
+        print(f"In start_container/image: {e}")
 
     # Check if the Docker container exists
     try:
@@ -27,6 +39,8 @@ def start_container(client, image_name, container_name):
             shm_size="2g"
         )
         print(f"Container {container_name} started successfully.")
+    except Exception as e:
+        print(f"In start_container/container: {e}")
 
 def stop_container(client, container_name):
     # Check if the Docker container exists
@@ -37,6 +51,8 @@ def stop_container(client, container_name):
         print(f"Container {container_name} stopped successfully.")
     except docker.errors.NotFound:
         print(f"Container {container_name} not found, cannot stop.")
+    except Exception as e:
+        print(f"In stop_container: {e}")
 
 def selenium_docker_ctrl(action):
     client = docker.from_env()
