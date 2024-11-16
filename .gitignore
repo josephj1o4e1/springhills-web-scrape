@@ -4,3 +4,4 @@ dist/
 /ignore
 /shipnotices
 /logs
+*.env

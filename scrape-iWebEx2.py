@@ -5,10 +5,11 @@ import pandas as pd
 import time
 
 # helper functions
-from utils import setup_logger, make_shipfolder, make_shipfile, parse_creation_date, format_elapsed_seconds
+from utils import setup_logger, make_shipfolder, make_shipfile, read_cli_arguments, parse_creation_date, format_elapsed_seconds
 from selenium_helper import SeleniumHelper
 
-def main():
+def main(args):
+    app_env = args.env
     logger = setup_logger()  # Setup logging
     script_start_time = time.time()
     
@@ -43,7 +44,7 @@ def main():
     # Perform login and other operations
     try:
         url = "https://www.iexchangeweb.com/ieweb/general/login"
-        selhelp.login_iExWeb(url)
+        selhelp.login_iExWeb(url, app_env)
     except KeyboardInterrupt as e:
         logger.error(f"Keyboard interrupted: {e}")
         print('\nProcess interrupted by user.')
@@ -54,10 +55,19 @@ def main():
         return
 
     # Navigate to sentmail page...
+    try:
+        selhelp.navigate_sentmail()
+    except Exception as e:
+        logger.error(f"Error occurred during navigating to sentmail page: {e}")
+        print('Something went wront when navigating to the sentmail page, sorry...')
+        return
+
+
     
     # Ensure proper cleanup
     finally:
         selhelp.quit_scraper()
 
 if __name__=="__main__":
-    main()
+    args = read_cli_arguments()
+    main(args)

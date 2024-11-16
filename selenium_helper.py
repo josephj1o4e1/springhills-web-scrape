@@ -1,3 +1,4 @@
+import os
 import requests
 import time
 from selenium import webdriver
@@ -7,9 +8,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from get_credentials import get_credentials
 from selenium_docker_ctrl import selenium_docker_ctrl, check_docker_installed
 from utils import format_elapsed_seconds, setup_logger
-timeout = 60
+from dotenv import load_dotenv
 
+timeout = 60
 logger = setup_logger()
+load_dotenv()
 
 class MyLoginError(Exception):
     """Exception raised for errors in the login process."""
@@ -110,14 +113,18 @@ class SeleniumHelper:
         else:
             raise Exception("Unexpected Login Error: Login Failed but Login Error Element not present.")
 
-    def login_iExWeb(self, url, attempts=3):
+    def login_iExWeb(self, url, app_env, attempts=3):
         def login():
             # opening the website in chrome.
             # print('Opening iExchangeWeb URL....')
             self.driver.get(url)
 
             assert "iExchangeWeb" in self.driver.title, "not iExchangeWeb"
-            username, password = get_credentials()
+            if app_env=="prod":
+                username, password = get_credentials()
+            else: # dev, test
+                username, password = os.environ["DEV_USERNAME"], os.environ["DEV_PASSWORD"]
+            
             loginBox = WebDriverWait(self.driver, timeout).until( \
                 EC.presence_of_element_located((By.ID, "login-box")))
             
@@ -137,7 +144,6 @@ class SeleniumHelper:
             assert signin_button.text == 'Sign In', "error at: assert signin_button.text == Sign in"
             # click the submit button
             signin_button.click()
-
             self.check_login_status()
         
         max_attempts=attempts
@@ -159,7 +165,40 @@ class SeleniumHelper:
                     logger.error(f'Unexpected Error. Retry. {e}')
         
         print("Exceeded max attempts.")        
-        
+    
+    def check_sentmailpage_status(self):
+        try:
+            # Check if the URL contains 'mailbox/sent'
+            WebDriverWait(self.driver, 60).until(
+                EC.url_contains('mailbox/sent')
+            )
+            logger.info('Successfully navigated to the Sent Mail page!')
+
+            # Check if the "Sent" text appears in the upper bar
+            WebDriverWait(self.driver, 60).until(
+                EC.text_to_be_present_in_element(
+                    (By.XPATH, "/html/body/div[2]/aside[2]/ol/li[2]"), "Sent"
+                )
+            )
+            logger.info('"Sent" text is visible in the upper bar.')
+            print("Navigated to sentmail page!")
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to verify Sent Mail page status: {e}")
+
+    def navigate_sentmail(self):
+        # Click on the sentmail_button
+        leftside_bar = WebDriverWait(self.driver, 60).until( \
+            EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/aside[1]')))
+        mailbox_button = WebDriverWait(leftside_bar, 60).until( \
+            EC.presence_of_element_located((By.XPATH, './/section/ul/li[1]/a')))
+        mailbox_button.click()
+
+        sentmail_button = WebDriverWait(leftside_bar, 60).until(
+            EC.element_to_be_clickable((By.XPATH, ".//section/ul/li[1]/ul/li[4]/a"))
+        )
+        sentmail_button.click()
+        self.check_sentmailpage_status()
         
         
 

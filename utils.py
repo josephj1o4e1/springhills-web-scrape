@@ -1,5 +1,4 @@
-import os
-import logging
+import os, logging, argparse
 from datetime import datetime, timedelta
 
 def parse_creation_date(datetime_str: str) -> datetime:
@@ -65,3 +64,28 @@ def setup_logger():
         logger.setLevel(logging.DEBUG)
 
     return logger
+
+def read_cli_arguments():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument(
+            "--env",
+            default="prod",
+            action="store",
+            choices=("prod", "dev", "test"),
+            help="Application environment to run in"
+        )
+    return arg_parser.parse_args()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
