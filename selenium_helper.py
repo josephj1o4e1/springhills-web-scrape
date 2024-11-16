@@ -9,6 +9,8 @@ from get_credentials import get_credentials
 from selenium_docker_ctrl import selenium_docker_ctrl, check_docker_installed
 from utils import format_elapsed_seconds, setup_logger
 from dotenv import load_dotenv
+import pandas as pd
+from typing import List
 
 timeout = 60
 logger = setup_logger()
@@ -200,7 +202,16 @@ class SeleniumHelper:
         sentmail_button.click()
         self.check_sentmailpage_status()
         
-        
+    def get_shipnotice_idxs(self, app_env:str) -> List[int]:
+        # Inside sent mails, find the rows where Subject="Accepted -Ship Notice....."
+        # If dev, use env var: daterange=> datetime.now().date()~os.environ["DEV_CRAWL_UNTIL"]
+        # Else, let user type the date range. 
+        pass
+
+    def crawl_shipnotices(self, shipnotice_idxs:List[int], app_env:str) -> pd.DataFrame:
+        pass
+
+
 
 
 

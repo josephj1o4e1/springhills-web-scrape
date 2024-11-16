@@ -5,7 +5,7 @@ import pandas as pd
 import time
 
 # helper functions
-from utils import setup_logger, make_shipfolder, make_shipfile, read_cli_arguments, parse_creation_date, format_elapsed_seconds
+from utils import setup_logger, make_shipfolder, make_shipfile, read_cli_arguments, store_shipnotice_csv, parse_creation_date, format_elapsed_seconds
 from selenium_helper import SeleniumHelper
 
 def main(args):
@@ -59,10 +59,33 @@ def main(args):
         selhelp.navigate_sentmail()
     except Exception as e:
         logger.error(f"Error occurred during navigating to sentmail page: {e}")
-        print('Something went wront when navigating to the sentmail page, sorry...')
+        print('Something went wrong when navigating to the sentmail page, sorry...')
         return
 
-
+    # Within single page, find the rows where Subject="Accepted -Ship Notice....."
+    try:
+        shipnotice_idxs = selhelp.get_shipnotice_idxs(app_env)
+    except Exception as e:
+        logger.error(f"Error occurred at getting ship notice indexes: {e}")
+        print('Something went wrong when crawling the shipnotices, sorry...')
+        return
+    
+    # Start crawling shipnotices (Within single page)
+    try:
+        df_shipNotice = selhelp.crawl_shipnotices(shipnotice_idxs, app_env)
+        assert df_shipNotice is not None
+    except Exception as e:
+        logger.error(f"Error occurred at crawl_shipnotices: {e}")
+        print('Something went wrong when crawling the shipnotices, sorry...')
+        return
+    
+    # Store DataFrame
+    try:
+        store_shipnotice_csv(df_shipNotice)
+    except Exception as e:
+        logger.error(f"Error occurred at store_shipnotice_csv: {e}")
+        print('Something went wrong when storing the shipnotices, sorry...')
+        return
     
     # Ensure proper cleanup
     finally:

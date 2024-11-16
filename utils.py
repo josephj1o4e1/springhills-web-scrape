@@ -1,5 +1,6 @@
 import os, logging, argparse
 from datetime import datetime, timedelta
+import pandas as pd
 
 def parse_creation_date(datetime_str: str) -> datetime:
     # Set date format of 'creation_date' in iExchangeWeb
@@ -76,7 +77,8 @@ def read_cli_arguments():
         )
     return arg_parser.parse_args()
 
-
+def store_shipnotice_csv(df_shipNotice: pd.DataFrame):
+    pass
 
 
 
