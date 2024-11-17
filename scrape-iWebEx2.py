@@ -22,7 +22,7 @@ def main(args, selhelp: SeleniumHelper):
     except Exception as e:
         logger.error(f"Error occurred during Selenium Docker setup: {e}")
         print('Something went wrong...')
-        return  # Exit gracefully
+        return
 
     # Start WebDriver
     try:
@@ -60,16 +60,26 @@ def main(args, selhelp: SeleniumHelper):
     # Within single page, find the rows where Subject="Accepted -Ship Notice....."
     try:
         shipnotice_idxs = selhelp.get_shipnotice_idxs(app_env)
-        print(shipnotice_idxs)
-        print(f"len={len(shipnotice_idxs)}")
+        logger.info(shipnotice_idxs)
+        logger.info(f"len={len(shipnotice_idxs)}")
     except Exception as e:
         logger.error(f"Error occurred at getting ship notice indexes: {e}")
         print('Something went wrong when crawling the shipnotices, sorry...')
         return
     
+    # print(f'Found {len(shipnotice_idxs)} rows with ship notices at page {page} starting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
+    print(f'Found {len(shipnotice_idxs)} rows with ship notices at page 1. \nstarting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
+
     # Start crawling shipnotices (Within single page)
     try:
         df_shipNotice = selhelp.crawl_shipnotices(shipnotice_idxs, app_env)
+        expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num"]
+        if list(df_shipNotice.columns)!=expected_cols:
+            raise ValueError(f"Schema mismatch! Expected {expected_cols}, but got {list(df_shipNotice.columns)}")
+    except ValueError as e:
+        logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
+        print('Something went wrong when crawling the shipnotices, sorry...')
+        return
     except Exception as e:
         logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
         print('Something went wrong when crawling the shipnotices, sorry...')
@@ -79,9 +89,11 @@ def main(args, selhelp: SeleniumHelper):
     try:
         store_shipnotice_csv(df_shipNotice, shipnotice_filepath)
     except Exception as e:
-        logger.error(f"Exception occurred at store_shipnotice_csv: {repr(e)}")
+        logger.error(f"Error occurred at store_shipnotice_csv: {repr(e)}")
         print('Something went wrong when storing the shipnotices, sorry...')
         return
+    print("Saved data to shipnotice folder!")
+    logger.info(f"total time spent: {(time.time()-script_start_time):.2f}s")
 
 
 
@@ -97,6 +109,6 @@ if __name__=="__main__":
     except Exception as e:
         logging.error(f"Unhandled exception in main: {e}")
     finally:
-        # Ensure proper cleanup
+        # Ensure proper cleanup and exit gracefully
         selhelp.quit_scraper()
 

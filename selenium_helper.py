@@ -378,7 +378,7 @@ class SeleniumHelper:
         df_shipNotice = pd.DataFrame()
         # To avoid stale element exception, find all rows every iteration. Think of a better way later
         sentmail_url = self.homeurl.replace("inbox", "sent")
-        for idx in reversed(shipnotice_idxs): # reversed, start processing from earliest non-crawled date.
+        for i, idx in enumerate(reversed(shipnotice_idxs)): # reversed, start processing from earliest non-crawled date.
             # Access EDI page using the view button in a single row. 
             # To avoid stale element exception, go back to sentmail page and find all rows everytime.
             self.driver.get(sentmail_url)
@@ -394,7 +394,7 @@ class SeleniumHelper:
                 logger.info(f'Click using JavaScript as a fallback at idx={idx}')
                 self.driver.execute_script("arguments[0].click();", view_button)
             check_EDIpage_status()
-            print(f'navigated to edi page! idx={idx}')
+            print(f'navigated to edi page at row={idx}')
 
             # Before getting the desired data, need to switch to iframe first
             switch_to_iframe()
@@ -402,8 +402,8 @@ class SeleniumHelper:
             # Get the desired data
             tables = get_tables_from_iframe()
             df_shipNotice = crawl_tables_to_df(tables, df_shipNotice)
-            print(f"finish idx {idx}! At total runtime at: {time.time()-self.script_run_time}")
-        print(f"finish processing! ")
+            print(f"#{i+1} finished row {idx}! Total runtime at: {(time.time()-self.script_run_time):.2f}s")
+        print(f"finished processing! ")
         return df_shipNotice
 
             
