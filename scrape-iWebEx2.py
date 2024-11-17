@@ -5,19 +5,16 @@ import pandas as pd
 import time
 
 # helper functions
-from utils import setup_logger, make_shipfolder, make_shipfile, read_cli_arguments, store_shipnotice_csv, parse_creation_date, format_elapsed_seconds
+from utils import setup_logger, make_shipfolder, name_shipfile, read_cli_arguments, store_shipnotice_csv
 from selenium_helper import SeleniumHelper
 
-def main(args):
-    app_env = args.env
-    logger = setup_logger()  # Setup logging
-    script_start_time = time.time()
-    
-    df_shipNotice = None
-    shipnotice_folderpath = make_shipfolder()
-    shipnotice_filename = make_shipfile()
+logger = setup_logger()  # Setup logging
 
-    selhelp = SeleniumHelper(script_start_time)
+def main(args, selhelp: SeleniumHelper):
+    app_env = args.env
+    shipnotice_folderpath = make_shipfolder() # make and name
+    shipnotice_filename = name_shipfile() # only name
+    shipnotice_filepath = os.path.join(shipnotice_folderpath, shipnotice_filename)
     
     # Setup selenium environment
     try:
@@ -45,14 +42,12 @@ def main(args):
     try:
         url = "https://www.iexchangeweb.com/ieweb/general/login"
         selhelp.login_iExWeb(url, app_env)
-    except KeyboardInterrupt as e:
-        logger.error(f"Keyboard interrupted: {e}")
-        print('\nProcess interrupted by user.')
-        return
     except Exception as e:
         logger.error(f"Error occurred during login: {e}")
         print('Login failed...')
         return
+
+    print('Locating ship notice data...')
 
     # Navigate to sentmail page...
     try:
@@ -65,6 +60,8 @@ def main(args):
     # Within single page, find the rows where Subject="Accepted -Ship Notice....."
     try:
         shipnotice_idxs = selhelp.get_shipnotice_idxs(app_env)
+        print(shipnotice_idxs)
+        print(f"len={len(shipnotice_idxs)}")
     except Exception as e:
         logger.error(f"Error occurred at getting ship notice indexes: {e}")
         print('Something went wrong when crawling the shipnotices, sorry...')
@@ -73,24 +70,33 @@ def main(args):
     # Start crawling shipnotices (Within single page)
     try:
         df_shipNotice = selhelp.crawl_shipnotices(shipnotice_idxs, app_env)
-        assert df_shipNotice is not None
     except Exception as e:
-        logger.error(f"Error occurred at crawl_shipnotices: {e}")
+        logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
         print('Something went wrong when crawling the shipnotices, sorry...')
         return
     
     # Store DataFrame
     try:
-        store_shipnotice_csv(df_shipNotice)
+        store_shipnotice_csv(df_shipNotice, shipnotice_filepath)
     except Exception as e:
-        logger.error(f"Error occurred at store_shipnotice_csv: {e}")
+        logger.error(f"Exception occurred at store_shipnotice_csv: {repr(e)}")
         print('Something went wrong when storing the shipnotices, sorry...')
         return
-    
-    # Ensure proper cleanup
-    finally:
-        selhelp.quit_scraper()
+
+
 
 if __name__=="__main__":
     args = read_cli_arguments()
-    main(args)
+    script_start_time = time.time()
+    selhelp = SeleniumHelper(script_start_time)
+    try:
+        main(args, selhelp)
+    except KeyboardInterrupt as e:
+        logger.info(f"Keyboard interrupted by user.")
+        print('\nProcess interrupted by user.')
+    except Exception as e:
+        logging.error(f"Unhandled exception in main: {e}")
+    finally:
+        # Ensure proper cleanup
+        selhelp.quit_scraper()
+

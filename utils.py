@@ -2,10 +2,8 @@ import os, logging, argparse
 from datetime import datetime, timedelta
 import pandas as pd
 
-def parse_creation_date(datetime_str: str) -> datetime:
-    # Set date format of 'creation_date' in iExchangeWeb
-    date_format = "%m/%d/%Y %I:%M %p"
-    # 6/28/24 11:34 AM => 6/28/2024 11:34 AM
+def parse_creation_date(datetime_str: str, date_format: str="%m/%d/%Y %I:%M %p") -> datetime:
+    # default format example: 6/28/24 11:34 AM
     date_part, time_part, meridiem = datetime_str.split(' ')
     month, day, year = date_part.split('/')
     full_year = f"20{year}"
@@ -23,7 +21,7 @@ def make_shipfolder():
         print(f'Created folder: ./{shipnotice_foldername}')
     return shipnotice_folderpath
 
-def make_shipfile():
+def name_shipfile():
     current_time = datetime.now()    
     formatted_time = current_time.strftime("%Y%m%d-%H%M%S") # Format it into the desired string: YYYYMMDD-HHMMSS
     shipnotice_filename = f'ship-notice-total{formatted_time}.csv'
@@ -77,8 +75,12 @@ def read_cli_arguments():
         )
     return arg_parser.parse_args()
 
-def store_shipnotice_csv(df_shipNotice: pd.DataFrame):
-    pass
+def store_shipnotice_csv(df_shipNotice: pd.DataFrame, shipnotice_filepath: str, idx_label:str='id'):
+    if len(df_shipNotice)>0:
+        df_shipNotice.to_csv(shipnotice_filepath, index_label=idx_label)
+    else:
+        print('No ship notice crawled!')
+
 
 
 
