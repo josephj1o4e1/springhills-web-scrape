@@ -208,8 +208,8 @@ class SeleniumHelper:
         #     EC.element_to_be_clickable((By.XPATH, ".//section/ul/li[1]/ul/li[4]/a"))
         # )
         # sentmail_button.click()
-        
-    
+
+
     def __getSentmailrows(self):
         # need to make sure is in sentmail page.
         self.check_sentmailpage_status()
@@ -225,18 +225,22 @@ class SeleniumHelper:
         )
         return rows
 
-    def get_shipnotice_idxs(self, app_env:str) -> List[int]:
-        """
-        # Inside sent mails, find the rows where Subject="Accepted -Ship Notice....."
-        # If dev, use env var: daterange=> datetime.now().date()~os.environ["DEV_CRAWL_UNTIL"]
-        # Else, let user type the date range. 
-        """
-        crawluntil=None
+    def get_crawluntil_time(self, app_env):
         if app_env=="prod":
             # let user type in the crawuntil date
             pass
         else: # dev, test
             crawluntil = datetime.fromisoformat(os.environ["DEV_CRAWL_UNTIL"])
+        return crawluntil
+
+    def get_shipnotice_idxs(self, crawluntil:datetime) -> List[int]:
+        """
+        # Inside sent mails, find the rows where Subject="Accepted -Ship Notice....."
+        # If dev, use env var: daterange=> datetime.now().date()~os.environ["DEV_CRAWL_UNTIL"]
+        # Else, let user type the date range. 
+        """
+        if crawluntil is None:
+            raise ValueError("crawluntil cannot be None")
         # Set date format of 'creation_date' in iExchangeWeb
         date_format = "%m/%d/%Y %I:%M %p"
         
@@ -260,7 +264,7 @@ class SeleniumHelper:
             else: continue
         return ship_notice_idxs
         
-    def crawl_shipnotices(self, shipnotice_idxs:List[int], app_env:str) -> pd.DataFrame:
+    def crawl_shipnotices(self, shipnotice_idxs:List[int], df_shipNotice:pd.DataFrame) -> pd.DataFrame:
         def check_EDIpage_status():
             # Make sure that the navigated EDI item page is normal. 
             # checks url and section element's presence
@@ -374,8 +378,7 @@ class SeleniumHelper:
                         df_shipNotice = pd.concat([df_shipNotice, df_row], ignore_index=True)
                     else: continue
             return df_shipNotice
-
-        df_shipNotice = pd.DataFrame()
+        
         # To avoid stale element exception, find all rows every iteration. Think of a better way later
         sentmail_url = self.homeurl.replace("inbox", "sent")
         for i, idx in enumerate(reversed(shipnotice_idxs)): # reversed, start processing from earliest non-crawled date.
@@ -403,10 +406,67 @@ class SeleniumHelper:
             tables = get_tables_from_iframe()
             df_shipNotice = crawl_tables_to_df(tables, df_shipNotice)
             print(f"#{i+1} finished row {idx}! Total runtime at: {(time.time()-self.script_run_time):.2f}s")
-        print(f"finished processing! ")
+        self.driver.get(sentmail_url)
         return df_shipNotice
 
+    def crawl_shipnotices_until(self, app_env:str, df_shipNotice:pd.DataFrame=pd.DataFrame(), maxpages:int=10) -> pd.DataFrame:
+        def navigate_to_next_page():
+            try:
+                # Wait for the "Next" button to be clickable
+                next_button = WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.XPATH, "/html/body/div[2]/aside[2]/section/div/div[2]/ul/li[8]/a")),
+                    EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/aside[2]/section/div/div[2]/ul/li[8]/a"))
+                )
+                next_button.click()
+                print("Navigating to the next page...")
+            except ElementClickInterceptedException:
+                # Click using JavaScript as a fallback. Occassionally there's an element blocking the button. 
+                logger.info(f'Click using JavaScript as a fallback when navigating to next page.')
+                self.driver.execute_script("arguments[0].click();", next_button)
+            except Exception as e:
+                print(f"Error navigating to the next page: {e}")
+                return
+    
+        for page in range(maxpages):
+            # Step 1: Within single page, find the rows where Subject="Accepted -Ship Notice....."
+            try:
+                crawluntil_time = self.get_crawluntil_time(app_env=app_env)
+                shipnotice_idxs = self.get_shipnotice_idxs(crawluntil=crawluntil_time)
+                if not shipnotice_idxs: break # early stop by creation date
+                logger.info(shipnotice_idxs)
+                logger.info(f"len={len(shipnotice_idxs)}")
+            except Exception as e:
+                logger.error(f"Error occurred at getting ship notice indexes: {e}")
+                print('Something went wrong when crawling the shipnotices, sorry...')
+                return
             
+            print(f'Found {len(shipnotice_idxs)} rows with ship notices at page {page+1} starting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
+
+            # Step 2: Start crawling shipnotices (Within single page)
+            try:
+                df_shipNotice = self.crawl_shipnotices(shipnotice_idxs, df_shipNotice)
+                # df_shipNotice = self.crawl_shipnotices(shipnotice_idxs[:3], df_shipNotice)
+                print(f"finished processing page {page+1}!")
+                expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num"]
+                if list(df_shipNotice.columns)!=expected_cols:
+                    raise ValueError(f"Schema mismatch! Expected {expected_cols}, but got {list(df_shipNotice.columns)}")
+            except ValueError as e:
+                logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
+                print('Something went wrong when crawling the shipnotices, sorry...')
+                return
+            except Exception as e:
+                logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
+                print('Something went wrong when crawling the shipnotices, sorry...')
+                return
+            
+            # Step 3: Navigate to the next page if we haven't reached the stop condition
+            try:
+                navigate_to_next_page()
+                self.check_sentmailpage_status()
+            except Exception as e:
+                logger.error(f"Error occurred when navigating to the next page: {e}")
+                return
+        return df_shipNotice
 
 
 

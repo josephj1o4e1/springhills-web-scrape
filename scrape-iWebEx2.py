@@ -57,22 +57,9 @@ def main(args, selhelp: SeleniumHelper):
         print('Something went wrong when navigating to the sentmail page, sorry...')
         return
 
-    # Within single page, find the rows where Subject="Accepted -Ship Notice....."
+    # Start crawling shipnotices (across pages)
     try:
-        shipnotice_idxs = selhelp.get_shipnotice_idxs(app_env)
-        logger.info(shipnotice_idxs)
-        logger.info(f"len={len(shipnotice_idxs)}")
-    except Exception as e:
-        logger.error(f"Error occurred at getting ship notice indexes: {e}")
-        print('Something went wrong when crawling the shipnotices, sorry...')
-        return
-    
-    # print(f'Found {len(shipnotice_idxs)} rows with ship notices at page {page} starting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
-    print(f'Found {len(shipnotice_idxs)} rows with ship notices at page 1. \nstarting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
-
-    # Start crawling shipnotices (Within single page)
-    try:
-        df_shipNotice = selhelp.crawl_shipnotices(shipnotice_idxs, app_env)
+        df_shipNotice = selhelp.crawl_shipnotices_until(app_env=app_env, maxpages=5)
         expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num"]
         if list(df_shipNotice.columns)!=expected_cols:
             raise ValueError(f"Schema mismatch! Expected {expected_cols}, but got {list(df_shipNotice.columns)}")
