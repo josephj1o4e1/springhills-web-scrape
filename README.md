@@ -1,7 +1,7 @@
-Development Environment: 
-OS: WSL2
-Virtual Environment: Conda
-Tools used: Docker
+Development Environment:  
+OS: WSL2(ubuntu)  
+Virtual Environment: Conda  
+Tools used: Docker  
 
 1. Install Docker: https://docs.docker.com/get-docker/
 2. Install Miniconda: https://docs.anaconda.com/miniconda/install/
