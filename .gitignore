@@ -5,3 +5,4 @@ dist/
 /shipnotices
 /logs
 *.env
+bfg-replacetext.txt
