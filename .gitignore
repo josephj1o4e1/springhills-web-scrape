@@ -7,3 +7,4 @@ dist/
 *.env
 bfg-replacetext.txt
 *.spec
+conda_env/

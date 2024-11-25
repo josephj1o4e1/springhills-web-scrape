@@ -106,7 +106,7 @@ class SeleniumHelper:
 
     def check_login_athome(self):
         # Wait for either login success (URL contains 'mailbox/inbox') or login failure (login_error element)
-        print("check for login status at homepage")
+        print("Check for login status at homepage")
         WebDriverWait(self.driver, 60).until(
             lambda d: ("mailbox/inbox" in d.current_url) or 
                     EC.visibility_of_element_located((By.ID, "login_error"))(d)
@@ -154,7 +154,7 @@ class SeleniumHelper:
         max_attempts=attempts
         while attempts > 0:
             if max_attempts>1:
-                print(f'attempt {max_attempts-attempts+1}, max attempts {max_attempts}')
+                print(f'Login attempt {max_attempts-attempts+1}, max attempts {max_attempts}')
             try:
                 login()
                 # Make sure we are logged in at home
@@ -410,7 +410,7 @@ class SeleniumHelper:
                 logger.info(f'Click using JavaScript as a fallback at idx={idx}')
                 self.driver.execute_script("arguments[0].click();", view_button)
             check_EDIpage_status()
-            print(f'navigated to edi page at row={idx}')
+            print(f'Navigated to edi page at row={idx}')
 
             # Before getting the desired data, need to switch to iframe first
             switch_to_iframe()
@@ -453,7 +453,7 @@ class SeleniumHelper:
                 print('Something went wrong when crawling the shipnotices, sorry...')
                 return
             
-            print(f'Found {len(shipnotice_idxs)} rows with ship notices at page {page+1} starting from row {max(shipnotice_idxs)} to {min(shipnotice_idxs)}.')
+            print(f'Found {len(shipnotice_idxs)} rows with ship notices at page {page+1} starting from row {min(shipnotice_idxs)} to {max(shipnotice_idxs)}.')
 
             # Step 2: Start crawling shipnotices (Within single page)
             try:

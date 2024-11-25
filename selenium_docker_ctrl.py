@@ -1,13 +1,16 @@
 import docker
 import argparse
 import subprocess
+from utils import setup_logger
+
+logger = setup_logger()
 
 def check_docker_installed():
     try:
         x = subprocess.check_output(['docker', '--version'], stderr=subprocess.STDOUT)
         print(f"Great! I see you've already installed {x.decode('utf-8')}") # Print the Docker version if installed
     except FileNotFoundError as e:
-        print(e)
+        logger.error(e)
         print('\nDocker is not installed. Please install Docker at https://docs.docker.com/get-docker/')
         raise
 
@@ -15,22 +18,20 @@ def start_container(client, image_name, container_name):
     # Check if the Docker image exists locally
     try:
         client.images.get(image_name)
-        print(f"Image {image_name} found locally.")
+        logger.info(f"Image {image_name} found locally.")
     except docker.errors.ImageNotFound:
-        print(f"\nImage not found locally, now pulling Docker image: {image_name}")
+        logger.info(f"\nImage not found locally, now pulling Docker image: {image_name}")
         client.images.pull(image_name)
-        print(f"Image {image_name} pulled successfully.")
-    except Exception as e:
-        print(f"\nIn start_container/image: {e}")
+        logger.info(f"Image {image_name} pulled successfully.")
 
     # Check if the Docker container exists
     try:
         container = client.containers.get(container_name)
-        print(f"Starting existing Docker container: {container_name}")
+        logger.info(f"Starting existing Docker container: {container_name}")
         container.start()
-        print(f"Container {container_name} started successfully.")
+        logger.info(f"Container {container_name} started successfully.")
     except docker.errors.NotFound:
-        print(f"\nContainer {container_name} not found. Now starting a new Docker container {container_name} from image {image_name}")
+        logger.info(f"\nContainer {container_name} not found. Now starting a new Docker container {container_name} from image {image_name}")
         container = client.containers.run(
             image_name,
             name=container_name,
@@ -38,29 +39,28 @@ def start_container(client, image_name, container_name):
             ports={'4444/tcp': 4444, '7900/tcp': 7900},
             shm_size="2g"
         )
-        print(f"Container {container_name} started successfully.")
-    except Exception as e:
-        print(f"\nIn start_container/container: {e}")
+        logger.info(f"Container {container_name} started successfully.")
 
 def stop_container(client, container_name):
     # Check if the Docker container exists
     try:
         container = client.containers.get(container_name)
-        print(f"Stopping existing Docker container: {container_name}")
+        logger.info(f"Stopping existing Docker container: {container_name}")
         container.stop()
-        print(f"Container {container_name} stopped successfully.")
+        logger.info(f"Container {container_name} stopped successfully.")
     except docker.errors.NotFound:
-        print(f"\nContainer {container_name} not found, cannot stop.")
-    except Exception as e:
-        print(f"\nIn stop_container: {e}")
+        logger.info(f"\nContainer {container_name} not found, cannot stop.")
+        raise
 
 def selenium_docker_ctrl(action):
     client = docker.from_env()
     image_name = "selenium/standalone-chrome"
     container_name = "selenium-chrome-container"
     if action=='start':
+        print('Starting selenium docker...')
         start_container(client, image_name, container_name)
     elif action=='stop':
+        print('Stopping selenium docker...')
         stop_container(client, container_name)
     else:
         raise ValueError("selenium_docker_ctrl(action), where action should be either 'start' or 'stop'")

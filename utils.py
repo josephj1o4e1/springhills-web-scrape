@@ -26,7 +26,7 @@ def make_shipfolder():
 def name_shipfile(crawluntil_time:datetime):
     current_time = datetime.now()    
     formatted_current_time = current_time.strftime("%Y%m%d-%H%M%S") # Format it into the desired string: YYYYMMDD-HHMMSS
-    formatted_crawluntil_time = crawluntil_time.strftime("%Y%m%d-%H%M%S")
+    formatted_crawluntil_time = crawluntil_time.strftime("%Y%m%d")
     shipnotice_filename = f'ship-notices-{formatted_current_time}-{formatted_crawluntil_time}.csv'
     return shipnotice_filename
 
@@ -69,33 +69,12 @@ def setup_logger():
 
 def read_cli_arguments():
     # Create the argument parser
-    arg_parser = argparse.ArgumentParser(description="Crawl script with dynamic argument requirements")
+    arg_parser = argparse.ArgumentParser(description="Selenium crawler script")
 
     # Add the environment argument
     arg_parser.add_argument("--env", default="prod", choices=["prod", "dev", "test"], help="Environment to run in")
-
-    # Add the other arguments without setting `required` yet
-    arg_parser.add_argument("--username", help="Username for login")
-    arg_parser.add_argument("--password", help="Password for login")
-    arg_parser.add_argument("--crawl_year", type=int, help="Crawl until year (integer)")
-    arg_parser.add_argument("--crawl_month", type=int, help="Crawl until month (integer)")
-    arg_parser.add_argument("--crawl_day", type=int, help="Crawl until day (integer)")
-
-    # Parse the known arguments first to check the environment
     args, _ = arg_parser.parse_known_args()
 
-    # If the environment is prod, enforce required arguments
-    if args.env == "prod":
-        arg_parser = argparse.ArgumentParser(description="Crawl script with dynamic argument requirements")
-        arg_parser.add_argument("--env", default="prod", choices=["prod", "dev", "test"], help="Environment to run in")
-        arg_parser.add_argument("--username", required=True, help="Username for login")
-        arg_parser.add_argument("--password", required=True, help="Password for login")
-        arg_parser.add_argument("--crawl_year", required=True, type=int, help="Crawl until year (integer)")
-        arg_parser.add_argument("--crawl_month", required=True, type=int, help="Crawl until month (integer)")
-        arg_parser.add_argument("--crawl_day", required=True, type=int, help="Crawl until day (integer)")
-
-        # Re-parse arguments with updated parser
-        args = arg_parser.parse_args()
     return args
 
 def get_userinput_cli():
@@ -103,7 +82,7 @@ def get_userinput_cli():
     password = maskpass.askpass('Enter iExchangeWeb password: ')
     print('Enter the year/month/day to crawl until...')
     crawl_year = input('Year(ex: 2024) = ')
-    crawl_month = input('(ex: 1~12) = ')
+    crawl_month = input('Month(ex: 1~12) = ')
     crawl_day = input('Day(ex: 1~31) = ')
 
     return username, password, crawl_year, crawl_month, crawl_day
