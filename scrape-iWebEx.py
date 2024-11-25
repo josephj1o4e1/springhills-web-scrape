@@ -3,17 +3,41 @@ import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import time
+from dotenv import load_dotenv
 
 # helper functions
-from utils import setup_logger, make_shipfolder, name_shipfile, read_cli_arguments, store_shipnotice_csv
+from utils import setup_logger, make_shipfolder, name_shipfile, read_cli_arguments, store_shipnotice_csv, get_userinput_cli
 from selenium_helper import SeleniumHelper
 
 logger = setup_logger()  # Setup logging
+load_dotenv()
 
 def main(args, selhelp: SeleniumHelper):
     app_env = args.env
-    shipnotice_folderpath = make_shipfolder() # make and name
-    shipnotice_filename = name_shipfile() # only name
+    # Get username, password, and crawl date
+    if app_env=='prod': # input from script argurments (user input from GUI)
+        username, password = args.username, args.password
+        crawl_year, crawl_month, crawl_day = args.crawl_year, args.crawl_month, args.crawl_day
+    elif app_env=='dev': # from environment variables
+        username, password = os.environ["DEV_USERNAME"], os.environ["DEV_PASSWORD"]
+        crawl_year, crawl_month, crawl_day = os.environ["DEV_CRAWL_YEAR"], os.environ["DEV_CRAWL_MONTH"], os.environ["DEV_CRAWL_DAY"]
+    elif app_env=='test': # input from cli
+        username, password, crawl_year, crawl_month, crawl_day = get_userinput_cli()
+    # Check if any essential inputs is null
+    if not username or not password or not crawl_year or not crawl_month or not crawl_day:
+        raise ValueError('username or password or crawl date is abnormal!')
+    # Check validity of date:
+    try:
+        crawluntil_time = datetime(year=int(crawl_year), month=int(crawl_month), day=int(crawl_day))
+    except ValueError as e:
+        logger.error(f"Error occurred during validity of date: {e}")
+        print('Invalid date...')
+        return
+
+    print(f"Hi {username}, I see you want to crawl from today to {crawluntil_time}. No Problem...")
+    
+    shipnotice_folderpath = make_shipfolder() # make folder and return folder name
+    shipnotice_filename = name_shipfile() # only return file name
     shipnotice_filepath = os.path.join(shipnotice_folderpath, shipnotice_filename)
     
     # Setup selenium environment
@@ -29,7 +53,7 @@ def main(args, selhelp: SeleniumHelper):
         selhelp.init_webdriver(timeout=60)
     except Exception as e:
         logger.error(f"Error occurred while initializing WebDriver: {e}")
-        print('WebDriver initialization failed...')
+        print('WebDriver initialization failed, it happens...you can try again or restart machine.')
         return
 
     if selhelp.driver is None:
@@ -41,7 +65,7 @@ def main(args, selhelp: SeleniumHelper):
     # Perform login and other operations
     try:
         url = "https://www.iexchangeweb.com/ieweb/general/login"
-        selhelp.login_iExWeb(url, app_env)
+        selhelp.login_iExWeb(url, username, password)
     except Exception as e:
         logger.error(f"Error occurred during login: {e}")
         print('Login failed...')
@@ -59,10 +83,7 @@ def main(args, selhelp: SeleniumHelper):
 
     # Start crawling shipnotices (across pages)
     try:
-        df_shipNotice = selhelp.crawl_shipnotices_until(app_env=app_env, maxpages=5)
-        expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num"]
-        if list(df_shipNotice.columns)!=expected_cols:
-            raise ValueError(f"Schema mismatch! Expected {expected_cols}, but got {list(df_shipNotice.columns)}")
+        df_shipNotice = selhelp.crawl_shipnotices_until(crawluntil_time=crawluntil_time, maxpages=5)
     except ValueError as e:
         logger.error(f"Error occurred at crawl_shipnotices: {repr(e)}")
         print('Something went wrong when crawling the shipnotices, sorry...')

@@ -6,17 +6,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException
-from get_credentials import get_credentials
 from selenium_docker_ctrl import selenium_docker_ctrl, check_docker_installed
 from utils import format_elapsed_seconds, setup_logger, parse_creation_date, format_elapsed_seconds
-from dotenv import load_dotenv
 import pandas as pd
 from datetime import datetime
 from typing import List
 
 timeout = 60
 logger = setup_logger()
-load_dotenv()
 
 class MyLoginError(Exception):
     """Exception raised for errors in the login process."""
@@ -24,6 +21,10 @@ class MyLoginError(Exception):
         self.message = message
         super().__init__(self.message)
 
+class MaxAttemptsExceededError(Exception):
+    """Exception raised when the maximum number of login attempts is exceeded."""
+    def __init__(self, message="Exceeded max login attempts."):
+        super().__init__(message)
 
 class SeleniumHelper:
     def __init__(self, script_start_time):
@@ -80,6 +81,7 @@ class SeleniumHelper:
             try:
                 chrome_options = webdriver.ChromeOptions()
                 chrome_options.add_argument("--disable-features=SidePanelPinning")
+                chrome_options.add_argument("--incognito")
                 self.driver = webdriver.Remote(
                     command_executor='http://localhost:4444/wd/hub',
                     options=chrome_options
@@ -121,18 +123,14 @@ class SeleniumHelper:
         else:
             raise Exception("Unexpected Login Error: Login Failed but Login Error Element not present.")
 
-    def login_iExWeb(self, url, app_env, attempts=3):
+    def login_iExWeb(self, url, username, password, attempts=3):
         def login():
             # opening the website in chrome.
             # print('Opening iExchangeWeb URL....')
             self.driver.get(url)
 
             assert "iExchangeWeb" in self.driver.title, "not iExchangeWeb"
-            if app_env=="prod":
-                username, password = get_credentials()
-            else: # dev, test
-                username, password = os.environ["DEV_USERNAME"], os.environ["DEV_PASSWORD"]
-            
+
             loginBox = WebDriverWait(self.driver, timeout).until( \
                 EC.presence_of_element_located((By.ID, "login-box")))
             
@@ -173,7 +171,8 @@ class SeleniumHelper:
                     print('\nUnexpected Error. Retry.')
                     logger.error(f'Unexpected Error. Retry. {e}')
         
-        print("Exceeded max attempts.")        
+        print("Exceeded max attempts.")
+        raise MaxAttemptsExceededError("Exceeded maximum login attempts.")   
     
     def check_sentmailpage_status(self):
         try:
@@ -225,13 +224,6 @@ class SeleniumHelper:
         )
         return rows
 
-    def get_crawluntil_time(self, app_env):
-        if app_env=="prod":
-            # let user type in the crawuntil date
-            pass
-        else: # dev, test
-            crawluntil = datetime.fromisoformat(os.environ["DEV_CRAWL_UNTIL"])
-        return crawluntil
 
     def get_shipnotice_idxs(self, crawluntil:datetime) -> List[int]:
         """
@@ -264,7 +256,7 @@ class SeleniumHelper:
             else: continue
         return ship_notice_idxs
         
-    def crawl_shipnotices(self, shipnotice_idxs:List[int], df_shipNotice:pd.DataFrame) -> pd.DataFrame:
+    def crawl_shipnotices(self, shipnotice_idxs:List[int], df_shipNotice:pd.DataFrame, crawled_ASN:set) -> pd.DataFrame:
         def check_EDIpage_status():
             # Make sure that the navigated EDI item page is normal. 
             # checks url and section element's presence
@@ -333,7 +325,16 @@ class SeleniumHelper:
                                 data_element = WebDriverWait(caption_element, 60).until(
                                     EC.presence_of_element_located((By.XPATH, "following-sibling::td[@class='data']"))
                                 )
-                                sharedAttr_dict['ship_notice_num'] = data_element.text
+                                
+                                ASN = data_element.text
+                                # crawl from today no reverse, then if duplicate shipnotice#, skip return. 
+                                if ASN in crawled_ASN:
+                                    logger.info(f"skipped duplicate ASN {ASN}")
+                                    return df_shipNotice
+
+                                # verified that it's a uncrawled ship notice, include and continue
+                                sharedAttr_dict['ship_notice_num'] = ASN
+
                             elif caption_element.text.strip() == 'Create Date/Time':
                                 # find sibling (data)
                                 data_element = WebDriverWait(caption_element, 60).until(
@@ -346,7 +347,18 @@ class SeleniumHelper:
                         all_caption_elements = WebDriverWait(table, 60).until(
                             EC.presence_of_all_elements_located((By.CLASS_NAME, "caption"))
                         )
-                        for count, caption_element in enumerate(all_caption_elements):
+                        
+                        # Specify wanted caption elements (wanted data attributes)
+                        wanted_keywords = {"Order #", "PO #", "Buyer Part #", "Ship Quantity"}
+                        wanted_caption_elements = []
+                        for caption_element in all_caption_elements:
+                            if len(wanted_caption_elements) > 3: break
+                            caption = caption_element.text
+                            # Check if the caption contains any of the wanted keywords
+                            if any(keyword in caption for keyword in wanted_keywords):
+                                wanted_caption_elements.append(caption_element)
+
+                        for caption_element in wanted_caption_elements:
                             caption = caption_element.text
                             if "Order #" in caption or "PO #" in caption:
                                 # find sibling (data)                                
@@ -369,8 +381,6 @@ class SeleniumHelper:
                                     EC.presence_of_element_located((By.XPATH, "following-sibling::td[@class='data']"))
                                 )
                                 itemAttr_dict['ship_quantity'] = data_element.text
-                            elif count>=3:
-                                break
                         
                         # combine a attributes for a single item at a column level
                         df_row = pd.DataFrame.from_dict([{**sharedAttr_dict, **itemAttr_dict}])
@@ -379,13 +389,16 @@ class SeleniumHelper:
                     else: continue
             return df_shipNotice
         
+        
+        
         # To avoid stale element exception, find all rows every iteration. Think of a better way later
         sentmail_url = self.homeurl.replace("inbox", "sent")
-        for i, idx in enumerate(reversed(shipnotice_idxs)): # reversed, start processing from earliest non-crawled date.
+        # for i, idx in enumerate(reversed(shipnotice_idxs)): # reversed, start processing from earliest non-crawled date.
+        for i, idx in enumerate(shipnotice_idxs):  # dont reverse to make sure when skipping duplicate ASN we keep the newest. 
             # Access EDI page using the view button in a single row. 
             # To avoid stale element exception, go back to sentmail page and find all rows everytime.
             self.driver.get(sentmail_url)
-            row = self.__getSentmailrows()[idx]            
+            row = self.__getSentmailrows()[idx]
             try:
                 # Access through relative XPATH
                 view_button = WebDriverWait(row, 60).until(
@@ -405,11 +418,12 @@ class SeleniumHelper:
             # Get the desired data
             tables = get_tables_from_iframe()
             df_shipNotice = crawl_tables_to_df(tables, df_shipNotice)
+            print(f"sample data row: \n{df_shipNotice.tail(1)}")
             print(f"#{i+1} finished row {idx}! Total runtime at: {(time.time()-self.script_run_time):.2f}s")
         self.driver.get(sentmail_url)
         return df_shipNotice
 
-    def crawl_shipnotices_until(self, app_env:str, df_shipNotice:pd.DataFrame=pd.DataFrame(), maxpages:int=10) -> pd.DataFrame:
+    def crawl_shipnotices_until(self, crawluntil_time:datetime, df_shipNotice:pd.DataFrame=pd.DataFrame(), maxpages:int=10) -> pd.DataFrame:
         def navigate_to_next_page():
             try:
                 # Wait for the "Next" button to be clickable
@@ -426,11 +440,11 @@ class SeleniumHelper:
             except Exception as e:
                 print(f"Error navigating to the next page: {e}")
                 return
-    
+
+        crawled_ASN = {} # ship notice num
         for page in range(maxpages):
             # Step 1: Within single page, find the rows where Subject="Accepted -Ship Notice....."
             try:
-                crawluntil_time = self.get_crawluntil_time(app_env=app_env)
                 shipnotice_idxs = self.get_shipnotice_idxs(crawluntil=crawluntil_time)
                 if not shipnotice_idxs: break # early stop by creation date
                 logger.info(shipnotice_idxs)
@@ -444,10 +458,10 @@ class SeleniumHelper:
 
             # Step 2: Start crawling shipnotices (Within single page)
             try:
-                df_shipNotice = self.crawl_shipnotices(shipnotice_idxs, df_shipNotice)
+                df_shipNotice = self.crawl_shipnotices(shipnotice_idxs, df_shipNotice, crawled_ASN)
                 # df_shipNotice = self.crawl_shipnotices(shipnotice_idxs[:3], df_shipNotice)
                 print(f"finished processing page {page+1}!")
-                expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num"]
+                expected_cols = ["ship_to","ship_notice_num","order_num","buyer_part_num", "ship_quantity"]
                 if list(df_shipNotice.columns)!=expected_cols:
                     raise ValueError(f"Schema mismatch! Expected {expected_cols}, but got {list(df_shipNotice.columns)}")
             except ValueError as e:

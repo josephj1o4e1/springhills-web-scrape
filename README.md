@@ -1,7 +1,10 @@
+This is a Python Selenium Crawler for iExchangeWeb.  
+It handles login, hitting buttons, navigate and scrape data.  
+
 Development Environment:  
 OS: WSL2(ubuntu)  
 Virtual Environment: Conda  
-Tools used: Docker  
+Tools used: Docker 26.0.2  
 
 1. Install Docker: https://docs.docker.com/get-docker/
 2. Install Miniconda: https://docs.anaconda.com/miniconda/install/

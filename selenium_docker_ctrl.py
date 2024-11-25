@@ -15,13 +15,13 @@ def start_container(client, image_name, container_name):
     # Check if the Docker image exists locally
     try:
         client.images.get(image_name)
-        print(f"\nImage {image_name} found locally.")
+        print(f"Image {image_name} found locally.")
     except docker.errors.ImageNotFound:
         print(f"\nImage not found locally, now pulling Docker image: {image_name}")
         client.images.pull(image_name)
         print(f"Image {image_name} pulled successfully.")
     except Exception as e:
-        print(f"In start_container/image: {e}")
+        print(f"\nIn start_container/image: {e}")
 
     # Check if the Docker container exists
     try:
@@ -30,7 +30,7 @@ def start_container(client, image_name, container_name):
         container.start()
         print(f"Container {container_name} started successfully.")
     except docker.errors.NotFound:
-        print(f"Container {container_name} not found. Now starting a new Docker container {container_name} from image {image_name}")
+        print(f"\nContainer {container_name} not found. Now starting a new Docker container {container_name} from image {image_name}")
         container = client.containers.run(
             image_name,
             name=container_name,
@@ -40,19 +40,19 @@ def start_container(client, image_name, container_name):
         )
         print(f"Container {container_name} started successfully.")
     except Exception as e:
-        print(f"In start_container/container: {e}")
+        print(f"\nIn start_container/container: {e}")
 
 def stop_container(client, container_name):
     # Check if the Docker container exists
     try:
         container = client.containers.get(container_name)
-        print(f"\nStopping existing Docker container: {container_name}")
+        print(f"Stopping existing Docker container: {container_name}")
         container.stop()
         print(f"Container {container_name} stopped successfully.")
     except docker.errors.NotFound:
-        print(f"Container {container_name} not found, cannot stop.")
+        print(f"\nContainer {container_name} not found, cannot stop.")
     except Exception as e:
-        print(f"In stop_container: {e}")
+        print(f"\nIn stop_container: {e}")
 
 def selenium_docker_ctrl(action):
     client = docker.from_env()

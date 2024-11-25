@@ -2,6 +2,7 @@ import os, logging, argparse
 import logging.handlers as handlers
 from datetime import datetime, timedelta
 import pandas as pd
+import maskpass
 
 def parse_creation_date(datetime_str: str, date_format: str="%m/%d/%Y %I:%M %p") -> datetime:
     # default format example: 6/28/24 11:34 AM
@@ -66,21 +67,53 @@ def setup_logger():
     return logger
 
 def read_cli_arguments():
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument(
-            "--env",
-            default="prod",
-            action="store",
-            choices=("prod", "dev", "test"),
-            help="Application environment to run in"
-        )
-    return arg_parser.parse_args()
+    # Create the argument parser
+    arg_parser = argparse.ArgumentParser(description="Crawl script with dynamic argument requirements")
+
+    # Add the environment argument
+    arg_parser.add_argument("--env", default="prod", choices=["prod", "dev", "test"], help="Environment to run in")
+
+    # Add the other arguments without setting `required` yet
+    arg_parser.add_argument("--username", help="Username for login")
+    arg_parser.add_argument("--password", help="Password for login")
+    arg_parser.add_argument("--crawl_year", type=int, help="Crawl until year (integer)")
+    arg_parser.add_argument("--crawl_month", type=int, help="Crawl until month (integer)")
+    arg_parser.add_argument("--crawl_day", type=int, help="Crawl until day (integer)")
+
+    # Parse the known arguments first to check the environment
+    args, _ = arg_parser.parse_known_args()
+
+    # If the environment is prod, enforce required arguments
+    if args.env == "prod":
+        arg_parser = argparse.ArgumentParser(description="Crawl script with dynamic argument requirements")
+        arg_parser.add_argument("--env", default="prod", choices=["prod", "dev", "test"], help="Environment to run in")
+        arg_parser.add_argument("--username", required=True, help="Username for login")
+        arg_parser.add_argument("--password", required=True, help="Password for login")
+        arg_parser.add_argument("--crawl_year", required=True, type=int, help="Crawl until year (integer)")
+        arg_parser.add_argument("--crawl_month", required=True, type=int, help="Crawl until month (integer)")
+        arg_parser.add_argument("--crawl_day", required=True, type=int, help="Crawl until day (integer)")
+
+        # Re-parse arguments with updated parser
+        args = arg_parser.parse_args()
+    return args
+
+def get_userinput_cli():
+    username = input('\nEnter iExchangeWeb username: ')
+    password = maskpass.askpass('Enter iExchangeWeb password: ')
+    print('Enter the year/month/day to crawl until...')
+    crawl_year = input('Year(ex: 2024) = ')
+    crawl_month = input('(ex: 1~12) = ')
+    crawl_day = input('Day(ex: 1~31) = ')
+
+    return username, password, crawl_year, crawl_month, crawl_day
 
 def store_shipnotice_csv(df_shipNotice: pd.DataFrame, shipnotice_filepath: str, idx_label:str='id'):
     if len(df_shipNotice)>0:
         df_shipNotice.to_csv(shipnotice_filepath, index_label=idx_label)
     else:
         print('No ship notice crawled!')
+
+
 
 
 
