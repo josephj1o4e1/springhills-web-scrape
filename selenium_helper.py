@@ -418,7 +418,6 @@ class SeleniumHelper:
             # Get the desired data
             tables = get_tables_from_iframe()
             df_shipNotice = crawl_tables_to_df(tables, df_shipNotice)
-            print(f"sample data row: \n{df_shipNotice.tail(1)}")
             print(f"#{i+1} finished row {idx}! Total runtime at: {(time.time()-self.script_run_time):.2f}s")
         self.driver.get(sentmail_url)
         return df_shipNotice

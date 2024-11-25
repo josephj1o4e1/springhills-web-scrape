@@ -37,7 +37,7 @@ def main(args, selhelp: SeleniumHelper):
     print(f"Hi {username}, I see you want to crawl from today to {crawluntil_time}. No Problem...")
     
     shipnotice_folderpath = make_shipfolder() # make folder and return folder name
-    shipnotice_filename = name_shipfile() # only return file name
+    shipnotice_filename = name_shipfile(crawluntil_time) # only return file name
     shipnotice_filepath = os.path.join(shipnotice_folderpath, shipnotice_filename)
     
     # Setup selenium environment

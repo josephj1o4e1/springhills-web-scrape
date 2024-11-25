@@ -23,10 +23,11 @@ def make_shipfolder():
         print(f'Created folder: ./{shipnotice_foldername}')
     return shipnotice_folderpath
 
-def name_shipfile():
+def name_shipfile(crawluntil_time:datetime):
     current_time = datetime.now()    
-    formatted_time = current_time.strftime("%Y%m%d-%H%M%S") # Format it into the desired string: YYYYMMDD-HHMMSS
-    shipnotice_filename = f'ship-notices-{formatted_time}.csv'
+    formatted_current_time = current_time.strftime("%Y%m%d-%H%M%S") # Format it into the desired string: YYYYMMDD-HHMMSS
+    formatted_crawluntil_time = crawluntil_time.strftime("%Y%m%d-%H%M%S")
+    shipnotice_filename = f'ship-notices-{formatted_current_time}-{formatted_crawluntil_time}.csv'
     return shipnotice_filename
 
 def format_elapsed_seconds(elapsed_seconds):
